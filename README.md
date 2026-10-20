@@ -13,9 +13,7 @@ Terraform stack that provisions an Always Free ARM instance on Oracle Cloud, wit
 * 1 Public Subnet
 * 1 Internet Gateway
 * A managed default security list with public Tailscale UDP and optional scoped Bootstrap SSH
-* Up to 4 ARM Compute Instances
-* Up to 24GB Memory
-* Up to 200GB Block Storage
+* 1 ARM Compute Instance (`VM.Standard.A1.Flex`, Ubuntu 24.04) with 4 OCPUs, 24GB Memory and a 50GB Boot Volume
 
 ---
 
@@ -69,10 +67,14 @@ Terraform stack that provisions an Always Free ARM instance on Oracle Cloud, wit
 ```
 oci-alwaysfree-tf-stack/
 ├── main.tf                  # Provider, data sources, networking, compute
-├── variables.tf             # Input variables (2 required, 8 with defaults)
+├── variables.tf             # Input variables (2 required, 9 with defaults)
 ├── outputs.tf               # IPs, OCIDs for downstream use
 ├── terraform.tfvars.example # Copy to terraform.tfvars and fill in
 ├── preflight.sh             # Pre-deploy validation (OCI auth, keys, config)
+├── tests/
+│   ├── networking.tftest.hcl # terraform test, offline with a mock provider
+│   └── preflight.bats        # bats tests for preflight.sh
+├── AGENTS.md                # Instructions for coding agents (CLAUDE.md imports it)
 └── .gitignore               # Ignores tfstate, .terraform/, and tfvars
 ```
 
