@@ -29,11 +29,23 @@ data "oci_core_images" "ubuntu" {
   sort_order               = "DESC"
 }
 
+data "oci_core_images" "ubuntu_micro" {
+  count = var.micro_instance_enabled ? 1 : 0
+
+  compartment_id           = var.compartment_id
+  operating_system         = "Canonical Ubuntu"
+  operating_system_version = "24.04"
+  shape                    = "VM.Standard.E2.1.Micro"
+  sort_by                  = "TIMECREATED"
+  sort_order               = "DESC"
+}
+
 locals {
   availability_domain = data.oci_identity_availability_domains.ads.availability_domains[var.availability_domain_index].name
   image_id            = data.oci_core_images.ubuntu.images[0].id
   ssh_public_key      = var.ssh_public_key != null ? var.ssh_public_key : file(pathexpand(var.ssh_public_key_path))
   dns_prefix          = replace(lower(var.name_prefix), "/[^a-z0-9]/", "")
+  micro_hostname      = coalesce(var.micro_hostname, "${local.dns_prefix}-micro")
 }
 
 # --- Networking ---
@@ -224,5 +236,68 @@ resource "oci_core_instance" "this" {
       name          = "Compute HPC RDMA Authentication"
       desired_state = "DISABLED"
     }
+  }
+
+  # The image lookup always returns the newest build, and a new source_id
+  # forces replacement, which would destroy the boot volume.
+  lifecycle {
+    ignore_changes = [source_details[0].source_id]
+  }
+}
+
+resource "oci_core_instance" "micro" {
+  count = var.micro_instance_enabled ? 1 : 0
+
+  compartment_id      = var.compartment_id
+  availability_domain = local.availability_domain
+  display_name        = local.micro_hostname
+  shape               = "VM.Standard.E2.1.Micro"
+
+  source_details {
+    source_type             = "image"
+    source_id               = data.oci_core_images.ubuntu_micro[0].images[0].id
+    boot_volume_size_in_gbs = var.micro_boot_volume_size_in_gbs
+    boot_volume_vpus_per_gb = 10
+  }
+
+  create_vnic_details {
+    subnet_id                 = oci_core_subnet.this.id
+    assign_public_ip          = var.assign_public_ip
+    assign_private_dns_record = true
+    assign_ipv6ip             = false
+    hostname_label            = local.micro_hostname
+  }
+
+  # Cloud-init joins the tailnet only when a key is given; without one the
+  # instance is reached through bootstrap_ssh_cidr like the A1 instance.
+  metadata = merge(
+    { ssh_authorized_keys = local.ssh_public_key },
+    var.tailscale_auth_key == null ? {} : {
+      user_data = base64encode(join("\n", [
+        "#cloud-config",
+        yamlencode({
+          runcmd = [
+            "curl -fsSL https://tailscale.com/install.sh | sh",
+            "tailscale up --auth-key='${var.tailscale_auth_key}' --hostname='${local.micro_hostname}'",
+          ]
+        }),
+      ]))
+    },
+  )
+
+  availability_config {
+    recovery_action = "RESTORE_INSTANCE"
+  }
+
+  is_pv_encryption_in_transit_enabled = true
+
+  instance_options {
+    are_legacy_imds_endpoints_disabled = true
+  }
+
+  # metadata is create-only for user_data; the one-off auth key is spent after
+  # the first boot, so rotating it must not recreate the instance.
+  lifecycle {
+    ignore_changes = [source_details[0].source_id, metadata]
   }
 }

@@ -12,8 +12,13 @@ region = "us-chicago-1"
 # availability_domain_index = 0
 # ssh_public_key_path       = "~/.ssh/id_ed25519.pub"
 # name_prefix               = "oci-arm"
-# ocpus                     = 4
-# memory_in_gbs             = 24
+# ocpus                     = 2
+# memory_in_gbs             = 12
 # boot_volume_size_in_gbs   = 50
 # assign_public_ip          = true
 # bootstrap_ssh_cidr        = "198.51.100.42/32" # Temporary; remove or set null after Tailscale handoff
+# micro_instance_enabled        = true
+# micro_hostname                = "my-micro"
+# micro_boot_volume_size_in_gbs = 50
+# Pass the Tailscale key through the environment instead of this file:
+#   TF_VAR_tailscale_auth_key=tskey-auth-... terraform apply
