@@ -41,15 +41,15 @@ variable "name_prefix" {
 }
 
 variable "ocpus" {
-  description = "Number of ARM OCPUs (Always Free max: 4 total across all instances)"
+  description = "Number of ARM OCPUs (Always Free max: 2 total across all A1 instances)"
   type        = number
-  default     = 4
+  default     = 2
 }
 
 variable "memory_in_gbs" {
-  description = "Memory in GB (Always Free max: 24 total across all instances)"
+  description = "Memory in GB (Always Free max: 12 total across all A1 instances)"
   type        = number
-  default     = 24
+  default     = 12
 }
 
 variable "boot_volume_size_in_gbs" {
@@ -83,4 +83,41 @@ variable "bootstrap_ssh_cidr" {
     )
     error_message = "bootstrap_ssh_cidr must be null or one IPv4 address with a /32 prefix."
   }
+}
+
+variable "micro_instance_enabled" {
+  description = "Also create one VM.Standard.E2.1.Micro (x86, 1/8 OCPU, 1 GB RAM) in the same subnet"
+  type        = bool
+  default     = false
+}
+
+variable "micro_hostname" {
+  description = "Display name, VCN hostname and Tailscale hostname of the micro instance; null uses <sanitized name_prefix>-micro"
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.micro_hostname == null || try(length(regexall("^[a-z][a-z0-9-]{0,62}$", var.micro_hostname)) == 1, false)
+    error_message = "micro_hostname must be null or a DNS label: lowercase letters, digits and hyphens, starting with a letter, at most 63 characters."
+  }
+}
+
+variable "micro_boot_volume_size_in_gbs" {
+  description = "Boot volume size in GB for the micro instance (counts toward the same 200 GB Always Free total)"
+  type        = number
+  default     = 50
+
+  validation {
+    condition     = var.micro_boot_volume_size_in_gbs >= 50 && var.micro_boot_volume_size_in_gbs <= 32768
+    error_message = "micro_boot_volume_size_in_gbs must be between 50 and 32768 GB."
+  }
+}
+
+variable "tailscale_auth_key" {
+  description = "One-off Tailscale auth key; when set, cloud-init joins the micro instance to the tailnet as micro_hostname"
+  type        = string
+  default     = null
+  nullable    = true
+  sensitive   = true
 }

@@ -4,9 +4,10 @@
 # AGENTS.md
 
 Terraform stack (oracle/oci provider `~> 6.0`) that provisions one Always Free
-`VM.Standard.A1.Flex` Ubuntu 24.04 instance with its own VCN, public subnet and
-internet gateway. Everything lives in the root module; there are no child
-modules and no remote backend.
+`VM.Standard.A1.Flex` Ubuntu 24.04 instance, plus an optional
+`VM.Standard.E2.1.Micro` (`micro_instance_enabled`), with its own VCN, public
+subnet and internet gateway. Everything lives in the root module; there are no
+child modules and no remote backend.
 
 ## Commands
 
@@ -44,8 +45,13 @@ bats -f "PKCS8" tests/preflight.bats   # single bats test by name regex
   IPv4 `/32`; `boot_volume_size_in_gbs` must be at least 50 (OCI minimum);
   `name_prefix` is sanitized into DNS labels (`local.dns_prefix` plus `vcn` or
   `sub`) and must fit OCI's 15-character label limit.
-- **Always Free caps** (4 OCPU, 24 GB RAM, 200 GB block storage, totalled across
-  the tenancy) are the reason for the defaults. Keep new defaults inside them.
+- **Image drift.** Both image lookups return the newest build and a new
+  `source_id` forces replacement, so each instance ignores changes to it.
+  The micro instance also ignores `metadata`: its Tailscale key is one-off
+  cloud-init and must not recreate it later.
+- **Always Free caps** (A1: 2 OCPU and 12 GB RAM, from 1,500 OCPU hours and
+  9,000 GB hours a month; 2 E2.1.Micro; 200 GB block storage; all totalled
+  across the tenancy) are the reason for the defaults. Keep new defaults inside them.
 
 ## Tests
 
@@ -58,12 +64,16 @@ bats -f "PKCS8" tests/preflight.bats   # single bats test by name regex
 - `tests/preflight.bats` puts stub `terraform` and `oci` binaries on `PATH` and
   points `HOME`/`OCI_CLI_CONFIG_FILE` at a temp tree, then runs `preflight.sh`
   from a directory holding a fixture `terraform.tfvars`.
+- `tests/compute.tftest.hcl` uses the same mock setup to assert the A1
+  defaults, the micro instance's shape, image, hostname and cloud-init, and
+  that the Tailscale key never reaches the A1 instance.
 
 ## Conventions
 
 - Every file starts with two `ABOUTME:` comment lines describing it (`#` in
   HCL/shell, `<!-- -->` in Markdown). Keep them on new files.
-- Resources are named `this`; display names are `${var.name_prefix}-<kind>`.
+- Resources are named `this`, except the optional micro instance (`micro`);
+  display names are `${var.name_prefix}-<kind>`.
 - `preflight.sh` reads `terraform.tfvars` with grep/awk, not Terraform, and must
   stay portable between GNU and BSD tools (see the `stat -c || stat -f`
   fallback). It reports through `ok`/`skip`/`die` and exits 1 on any failure.

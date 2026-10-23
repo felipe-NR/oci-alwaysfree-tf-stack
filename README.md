@@ -13,7 +13,8 @@ Terraform stack that provisions an Always Free ARM instance on Oracle Cloud, wit
 * 1 Public Subnet
 * 1 Internet Gateway
 * A managed default security list with public Tailscale UDP and optional scoped Bootstrap SSH
-* 1 ARM Compute Instance (`VM.Standard.A1.Flex`, Ubuntu 24.04) with 4 OCPUs, 24GB Memory and a 50GB Boot Volume
+* 1 ARM Compute Instance (`VM.Standard.A1.Flex`, Ubuntu 24.04) with 2 OCPUs, 12GB Memory and a 50GB Boot Volume
+* Optional: 1 AMD Compute Instance (`VM.Standard.E2.1.Micro`, Ubuntu 24.04 x86_64) in the same subnet, with a 50GB Boot Volume and an optional cloud-init that joins it to your tailnet
 
 ---
 
@@ -67,11 +68,12 @@ Terraform stack that provisions an Always Free ARM instance on Oracle Cloud, wit
 ```
 oci-alwaysfree-tf-stack/
 ├── main.tf                  # Provider, data sources, networking, compute
-├── variables.tf             # Input variables (2 required, 9 with defaults)
+├── variables.tf             # Input variables (2 required, 13 with defaults)
 ├── outputs.tf               # IPs, OCIDs for downstream use
 ├── terraform.tfvars.example # Copy to terraform.tfvars and fill in
 ├── preflight.sh             # Pre-deploy validation (OCI auth, keys, config)
 ├── tests/
+│   ├── compute.tftest.hcl    # terraform test for instance sizing and the micro instance
 │   ├── networking.tftest.hcl # terraform test, offline with a mock provider
 │   └── preflight.bats        # bats tests for preflight.sh
 ├── AGENTS.md                # Instructions for coding agents (CLAUDE.md imports it)
@@ -92,11 +94,15 @@ Only `compartment_id` and `region` are required. Everything else has sensible de
 | `ssh_public_key` | `string` | `null` | SSH public key string. If null, reads from `ssh_public_key_path`. |
 | `ssh_public_key_path` | `string` | `~/.ssh/id_ed25519.pub` | Path to SSH public key file (used when `ssh_public_key` is null) |
 | `name_prefix` | `string` | `"oci-arm"` | Prefix for resource display names and DNS labels |
-| `ocpus` | `number` | `4` | ARM OCPUs (Always Free max: 4 total) |
-| `memory_in_gbs` | `number` | `24` | Memory in GB (Always Free max: 24 total) |
+| `ocpus` | `number` | `2` | ARM OCPUs (Always Free max: 2 total across A1 instances) |
+| `memory_in_gbs` | `number` | `12` | Memory in GB (Always Free max: 12 total across A1 instances) |
 | `boot_volume_size_in_gbs` | `number` | `50` | Boot volume in GB (Always Free max: 200 total) |
 | `assign_public_ip` | `bool` | `true` | Keep a public IP for outbound Internet access through the Internet Gateway |
 | `bootstrap_ssh_cidr` | `string` | `null` | Temporary workstation IPv4 `/32` allowed to reach public SSH; null allows no public SSH |
+| `micro_instance_enabled` | `bool` | `false` | Also create one `VM.Standard.E2.1.Micro` in the same subnet |
+| `micro_hostname` | `string` | `null` | Display name, VCN hostname and Tailscale hostname of the micro instance; null uses `<sanitized name_prefix>-micro` |
+| `micro_boot_volume_size_in_gbs` | `number` | `50` | Micro boot volume in GB (shares the 200 GB total) |
+| `tailscale_auth_key` | `string` (sensitive) | `null` | One-off Tailscale auth key; when set, cloud-init joins the micro instance to the tailnet |
 
 ---
 
@@ -126,10 +132,10 @@ The defaults stay within free-tier limits. If you change them, make sure the tot
 
 | Resource | This stack uses | Always Free limit |
 |----------|----------------|-------------------|
-| ARM OCPUs | 4 | 4 total |
-| Memory | 24 GB | 24 GB total |
-| Boot volume | 50 GB | 200 GB total |
-| Instances | 1 | Up to 4 ARM + 2 AMD |
+| ARM OCPUs | 2 | 2 total (1,500 OCPU hours/month) |
+| ARM memory | 12 GB | 12 GB total (9,000 GB hours/month) |
+| Boot volume | 50 GB (100 GB with the micro instance) | 200 GB total |
+| Instances | 1 ARM (+ 1 AMD micro, optional) | Up to 2 ARM + 2 AMD micro |
 | VCN | 1 | Included |
 
 **Cost Disclaimer: While this targets the Always Free tier, you are ultimately responsible for checking your OCI billing dashboard to ensure you haven't exceeded limits or selected the wrong region/shapes.**
